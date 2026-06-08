@@ -1,0 +1,6 @@
+{
+  "name": "Sri Amman Builders",
+  "description": "Construction & Real Estate Management platform for Sri Amman Builders. Manage Lands, Buildings, Projects, and corporate details with an elegant admin dashboard and dynamic media uploading.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
