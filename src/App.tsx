@@ -30,6 +30,8 @@ export default function App() {
 
   // Load content state on startup
   const fetchAllContent = async () => {
+    setIsLoading(true);
+    setErrorStatus(null);
     try {
       const response = await fetch('/api/content');
       if (response.ok) {
@@ -39,6 +41,7 @@ export default function App() {
         setProjects(data.projects);
         setAbout(data.about);
         setHeroImageUrl(data.hero.imageUrl);
+        setErrorStatus(null);
       } else {
         setErrorStatus("Could not synchronize database content.");
       }
