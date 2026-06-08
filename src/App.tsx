@@ -82,6 +82,13 @@ export default function App() {
       // Determine which source of truth to use
       const isFirestoreSeeded = loadedAbout !== null || loadedLands.length > 0 || loadedBuildings.length > 0 || loadedProjects.length > 0;
 
+      // Check localStorage fallbacks
+      const localLands = localStorage.getItem('amman_lands');
+      const localBuildings = localStorage.getItem('amman_buildings');
+      const localProjects = localStorage.getItem('amman_projects');
+      const localAbout = localStorage.getItem('amman_about');
+      const localHero = localStorage.getItem('amman_hero');
+
       if (isFirestoreSeeded) {
         console.log("Using primary Cloud Firestore database content");
         setLands(loadedLands);
@@ -89,6 +96,20 @@ export default function App() {
         setProjects(loadedProjects);
         setAbout(loadedAbout || DEFAULT_ABOUT);
         setHeroImageUrl(loadedHeroUrl || DEFAULT_HERO_IMAGE);
+
+        // Keep local cache updated
+        localStorage.setItem('amman_lands', JSON.stringify(loadedLands));
+        localStorage.setItem('amman_buildings', JSON.stringify(loadedBuildings));
+        localStorage.setItem('amman_projects', JSON.stringify(loadedProjects));
+        localStorage.setItem('amman_about', JSON.stringify(loadedAbout || DEFAULT_ABOUT));
+        localStorage.setItem('amman_hero', loadedHeroUrl || DEFAULT_HERO_IMAGE);
+      } else if (localLands || localBuildings || localProjects || localAbout || localHero) {
+        console.log("Using cached browser local storage content fallback");
+        setLands(localLands ? JSON.parse(localLands) : DEFAULT_LANDS);
+        setBuildings(localBuildings ? JSON.parse(localBuildings) : DEFAULT_BUILDINGS);
+        setProjects(localProjects ? JSON.parse(localProjects) : DEFAULT_PROJECTS);
+        setAbout(localAbout ? JSON.parse(localAbout) : DEFAULT_ABOUT);
+        setHeroImageUrl(localHero || DEFAULT_HERO_IMAGE);
       } else {
         // If Firestore is empty, but we are authenticated as the Google admin, let's seed Firestore!
         const canSeed = auth.currentUser && auth.currentUser.email === 's.bharath2128@gmail.com';
@@ -275,8 +296,13 @@ export default function App() {
         imageUrl: newLand.imageUrl || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=800&q=80"
       };
 
+      // Optimistic state update
+      const updatedLands = [...lands, landDoc];
+      setLands(updatedLands);
+      localStorage.setItem('amman_lands', JSON.stringify(updatedLands));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => setDoc(doc(db, 'lands', generatedId), landDoc));
+      await safeFirestoreWrite(() => setDoc(doc(db, 'lands', generatedId), landDoc)).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch('/api/lands', {
@@ -285,7 +311,6 @@ export default function App() {
         body: JSON.stringify(landDoc)
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Creation failed: ", err);
     }
@@ -301,8 +326,13 @@ export default function App() {
         ...updatedFields
       };
 
+      // Optimistic state update
+      const updatedLands = lands.map(l => l.id === id ? updatedLand : l);
+      setLands(updatedLands);
+      localStorage.setItem('amman_lands', JSON.stringify(updatedLands));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => setDoc(doc(db, 'lands', id), updatedLand));
+      await safeFirestoreWrite(() => setDoc(doc(db, 'lands', id), updatedLand)).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch(`/api/lands/${id}`, {
@@ -311,7 +341,6 @@ export default function App() {
         body: JSON.stringify(updatedFields)
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Edit failed: ", err);
     }
@@ -319,15 +348,19 @@ export default function App() {
 
   const handleDeleteLand = async (id: string) => {
     try {
+      // Optimistic state update
+      const updatedLands = lands.filter(l => l.id !== id);
+      setLands(updatedLands);
+      localStorage.setItem('amman_lands', JSON.stringify(updatedLands));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => deleteDoc(doc(db, 'lands', id)));
+      await safeFirestoreWrite(() => deleteDoc(doc(db, 'lands', id))).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch(`/api/lands/${id}`, {
         method: 'DELETE'
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Delete failed: ", err);
     }
@@ -347,8 +380,13 @@ export default function App() {
         imageUrl: newBuilding.imageUrl || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80"
       };
 
+      // Optimistic state update
+      const updatedBuildings = [...buildings, buildingDoc];
+      setBuildings(updatedBuildings);
+      localStorage.setItem('amman_buildings', JSON.stringify(updatedBuildings));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => setDoc(doc(db, 'buildings', generatedId), buildingDoc));
+      await safeFirestoreWrite(() => setDoc(doc(db, 'buildings', generatedId), buildingDoc)).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch('/api/buildings', {
@@ -357,7 +395,6 @@ export default function App() {
         body: JSON.stringify(buildingDoc)
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Creation failed: ", err);
     }
@@ -373,8 +410,13 @@ export default function App() {
         ...updatedFields
       };
 
+      // Optimistic state update
+      const updatedBuildings = buildings.map(b => b.id === id ? updatedBuilding : b);
+      setBuildings(updatedBuildings);
+      localStorage.setItem('amman_buildings', JSON.stringify(updatedBuildings));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => setDoc(doc(db, 'buildings', id), updatedBuilding));
+      await safeFirestoreWrite(() => setDoc(doc(db, 'buildings', id), updatedBuilding)).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch(`/api/buildings/${id}`, {
@@ -383,7 +425,6 @@ export default function App() {
         body: JSON.stringify(updatedFields)
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Edit failed: ", err);
     }
@@ -391,15 +432,19 @@ export default function App() {
 
   const handleDeleteBuilding = async (id: string) => {
     try {
+      // Optimistic state update
+      const updatedBuildings = buildings.filter(b => b.id !== id);
+      setBuildings(updatedBuildings);
+      localStorage.setItem('amman_buildings', JSON.stringify(updatedBuildings));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => deleteDoc(doc(db, 'buildings', id)));
+      await safeFirestoreWrite(() => deleteDoc(doc(db, 'buildings', id))).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch(`/api/buildings/${id}`, {
         method: 'DELETE'
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Delete failed: ", err);
     }
@@ -419,8 +464,13 @@ export default function App() {
         completionDate: newProj.completionDate || "December 2026"
       };
 
+      // Optimistic state update
+      const updatedProjects = [...projects, projectDoc];
+      setProjects(updatedProjects);
+      localStorage.setItem('amman_projects', JSON.stringify(updatedProjects));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => setDoc(doc(db, 'projects', generatedId), projectDoc));
+      await safeFirestoreWrite(() => setDoc(doc(db, 'projects', generatedId), projectDoc)).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch('/api/projects', {
@@ -429,7 +479,6 @@ export default function App() {
         body: JSON.stringify(projectDoc)
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Creation failed: ", err);
     }
@@ -445,8 +494,13 @@ export default function App() {
         ...updatedFields
       };
 
+      // Optimistic state update
+      const updatedProjects = projects.map(p => p.id === id ? updatedProject : p);
+      setProjects(updatedProjects);
+      localStorage.setItem('amman_projects', JSON.stringify(updatedProjects));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => setDoc(doc(db, 'projects', id), updatedProject));
+      await safeFirestoreWrite(() => setDoc(doc(db, 'projects', id), updatedProject)).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch(`/api/projects/${id}`, {
@@ -455,7 +509,6 @@ export default function App() {
         body: JSON.stringify(updatedFields)
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Edit failed: ", err);
     }
@@ -463,15 +516,19 @@ export default function App() {
 
   const handleDeleteProject = async (id: string) => {
     try {
+      // Optimistic state update
+      const updatedProjects = projects.filter(p => p.id !== id);
+      setProjects(updatedProjects);
+      localStorage.setItem('amman_projects', JSON.stringify(updatedProjects));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => deleteDoc(doc(db, 'projects', id)));
+      await safeFirestoreWrite(() => deleteDoc(doc(db, 'projects', id))).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch(`/api/projects/${id}`, {
         method: 'DELETE'
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Delete failed: ", err);
     }
@@ -486,8 +543,12 @@ export default function App() {
         ...aboutFields
       };
 
+      // Optimistic state update
+      setAbout(updatedAbout);
+      localStorage.setItem('amman_about', JSON.stringify(updatedAbout));
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => setDoc(doc(db, 'about', 'about-1'), updatedAbout));
+      await safeFirestoreWrite(() => setDoc(doc(db, 'about', 'about-1'), updatedAbout)).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch('/api/about', {
@@ -496,7 +557,6 @@ export default function App() {
         body: JSON.stringify(aboutFields)
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Update about failed: ", err);
     }
@@ -505,8 +565,12 @@ export default function App() {
   // Update brand hero banner
   const handleUpdateHero = async (newUrl: string) => {
     try {
+      // Optimistic state update
+      setHeroImageUrl(newUrl);
+      localStorage.setItem('amman_hero', newUrl);
+
       // Safely write to Cloud Firestore
-      await safeFirestoreWrite(() => setDoc(doc(db, 'hero', 'hero-1'), { id: 'hero-1', imageUrl: newUrl }));
+      await safeFirestoreWrite(() => setDoc(doc(db, 'hero', 'hero-1'), { id: 'hero-1', imageUrl: newUrl })).catch(() => null);
 
       // Update Express REST backup/primary
       await fetch('/api/hero', {
@@ -515,7 +579,6 @@ export default function App() {
         body: JSON.stringify({ imageUrl: newUrl })
       }).catch((e) => console.log("Local service endpoints silent"));
 
-      await fetchAllContent();
     } catch (err) {
       console.error("Update hero failed: ", err);
     }
