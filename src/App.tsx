@@ -39,7 +39,12 @@ export default function App() {
     setIsLoading(true);
     setErrorStatus(null);
     try {
-      // 1. Fetch from Firestore (No-crash safety block)
+      // 1. Fetch from local server-side database store
+      const apiResponse = await fetch('/api/content')
+        .then(res => res.json())
+        .catch(() => null);
+
+      // 2. Fetch from Firestore (No-crash safety block)
       const landsSnap = await getDocs(collection(db, 'lands')).catch(() => null);
       const buildingsSnap = await getDocs(collection(db, 'buildings')).catch(() => null);
       const projectsSnap = await getDocs(collection(db, 'projects')).catch(() => null);
@@ -74,25 +79,35 @@ export default function App() {
         loadedHeroUrl = heroDocSnap.data().imageUrl || '';
       }
 
-      // If Firestore is empty (never seeded), use default pre-filled data!
-      if (loadedLands.length === 0 && loadedBuildings.length === 0 && loadedProjects.length === 0 && !loadedAbout) {
-        console.log("Firestore database is empty. Injecting fallback default real-estate records.");
+      // Determine which source of truth to use
+      const isGoogleSignedIn = auth.currentUser !== null;
+
+      if (isGoogleSignedIn && (loadedLands.length > 0 || loadedBuildings.length > 0 || loadedProjects.length > 0 || loadedAbout)) {
+        console.log("Using primary Cloud Firestore database content");
+        setLands(loadedLands);
+        setBuildings(loadedBuildings);
+        setProjects(loadedProjects);
+        setAbout(loadedAbout || DEFAULT_ABOUT);
+        setHeroImageUrl(loadedHeroUrl || DEFAULT_HERO_IMAGE);
+      } else if (apiResponse) {
+        console.log("Using primary server-side JSON store database content");
+        setLands(apiResponse.lands && apiResponse.lands.length > 0 ? apiResponse.lands : DEFAULT_LANDS);
+        setBuildings(apiResponse.buildings && apiResponse.buildings.length > 0 ? apiResponse.buildings : DEFAULT_BUILDINGS);
+        setProjects(apiResponse.projects && apiResponse.projects.length > 0 ? apiResponse.projects : DEFAULT_PROJECTS);
+        setAbout(apiResponse.about || DEFAULT_ABOUT);
+        setHeroImageUrl((apiResponse.hero && apiResponse.hero.imageUrl) || DEFAULT_HERO_IMAGE);
+      } else {
+        console.log("Using fallback static default configuration data");
         setLands(DEFAULT_LANDS);
         setBuildings(DEFAULT_BUILDINGS);
         setProjects(DEFAULT_PROJECTS);
         setAbout(DEFAULT_ABOUT);
         setHeroImageUrl(DEFAULT_HERO_IMAGE);
-      } else {
-        setLands(loadedLands.length > 0 ? loadedLands : DEFAULT_LANDS);
-        setBuildings(loadedBuildings.length > 0 ? loadedBuildings : DEFAULT_BUILDINGS);
-        setProjects(loadedProjects.length > 0 ? loadedProjects : DEFAULT_PROJECTS);
-        setAbout(loadedAbout || DEFAULT_ABOUT);
-        setHeroImageUrl(loadedHeroUrl || DEFAULT_HERO_IMAGE);
       }
 
       setErrorStatus(null);
     } catch (err) {
-      console.error("Firestore loading exception: ", err);
+      console.error("Content loading exception: ", err);
       // Fallback completely to the defaults so it never displays a blank page
       setLands(DEFAULT_LANDS);
       setBuildings(DEFAULT_BUILDINGS);
@@ -201,6 +216,19 @@ export default function App() {
     return true; // Return true as feedback for sandbox setting
   };
 
+  // Helper to safely write to Cloud Firestore if user is logged in
+  const safeFirestoreWrite = async (writeFn: () => Promise<void>) => {
+    if (auth.currentUser) {
+      try {
+        await writeFn();
+      } catch (err) {
+        console.warn("Firestore sync write failed or denied:", err);
+      }
+    } else {
+      console.log("Bypassing Firestore synchronized write: Admin logged in with passcode.");
+    }
+  };
+
   // Dynamic Land Operations
   const handleAddLand = async (newLand: Omit<Land, 'id'>) => {
     try {
@@ -215,10 +243,10 @@ export default function App() {
         imageUrl: newLand.imageUrl || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=800&q=80"
       };
 
-      // Create doc in Cloud Firestore
-      await setDoc(doc(db, 'lands', generatedId), landDoc);
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => setDoc(doc(db, 'lands', generatedId), landDoc));
 
-      // Try local service fallback
+      // Update Express REST backup/primary
       await fetch('/api/lands', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -227,8 +255,7 @@ export default function App() {
 
       await fetchAllContent();
     } catch (err) {
-      console.error("Firestore creation failed: ", err);
-      handleFirestoreError(err, OperationType.CREATE, 'lands');
+      console.error("Creation failed: ", err);
     }
   };
 
@@ -242,8 +269,10 @@ export default function App() {
         ...updatedFields
       };
 
-      await setDoc(doc(db, 'lands', id), updatedLand);
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => setDoc(doc(db, 'lands', id), updatedLand));
 
+      // Update Express REST backup/primary
       await fetch(`/api/lands/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -252,23 +281,23 @@ export default function App() {
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.UPDATE, `lands/${id}`);
+      console.error("Edit failed: ", err);
     }
   };
 
   const handleDeleteLand = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'lands', id));
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => deleteDoc(doc(db, 'lands', id)));
 
+      // Update Express REST backup/primary
       await fetch(`/api/lands/${id}`, {
         method: 'DELETE'
       }).catch((e) => console.log("Local service endpoints silent"));
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.DELETE, `lands/${id}`);
+      console.error("Delete failed: ", err);
     }
   };
 
@@ -286,8 +315,10 @@ export default function App() {
         imageUrl: newBuilding.imageUrl || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80"
       };
 
-      await setDoc(doc(db, 'buildings', generatedId), buildingDoc);
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => setDoc(doc(db, 'buildings', generatedId), buildingDoc));
 
+      // Update Express REST backup/primary
       await fetch('/api/buildings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -296,8 +327,7 @@ export default function App() {
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.CREATE, 'buildings');
+      console.error("Creation failed: ", err);
     }
   };
 
@@ -311,8 +341,10 @@ export default function App() {
         ...updatedFields
       };
 
-      await setDoc(doc(db, 'buildings', id), updatedBuilding);
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => setDoc(doc(db, 'buildings', id), updatedBuilding));
 
+      // Update Express REST backup/primary
       await fetch(`/api/buildings/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -321,23 +353,23 @@ export default function App() {
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.UPDATE, `buildings/${id}`);
+      console.error("Edit failed: ", err);
     }
   };
 
   const handleDeleteBuilding = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'buildings', id));
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => deleteDoc(doc(db, 'buildings', id)));
 
+      // Update Express REST backup/primary
       await fetch(`/api/buildings/${id}`, {
         method: 'DELETE'
       }).catch((e) => console.log("Local service endpoints silent"));
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.DELETE, `buildings/${id}`);
+      console.error("Delete failed: ", err);
     }
   };
 
@@ -355,8 +387,10 @@ export default function App() {
         completionDate: newProj.completionDate || "December 2026"
       };
 
-      await setDoc(doc(db, 'projects', generatedId), projectDoc);
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => setDoc(doc(db, 'projects', generatedId), projectDoc));
 
+      // Update Express REST backup/primary
       await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -365,8 +399,7 @@ export default function App() {
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.CREATE, 'projects');
+      console.error("Creation failed: ", err);
     }
   };
 
@@ -380,8 +413,10 @@ export default function App() {
         ...updatedFields
       };
 
-      await setDoc(doc(db, 'projects', id), updatedProject);
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => setDoc(doc(db, 'projects', id), updatedProject));
 
+      // Update Express REST backup/primary
       await fetch(`/api/projects/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -390,23 +425,23 @@ export default function App() {
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.UPDATE, `projects/${id}`);
+      console.error("Edit failed: ", err);
     }
   };
 
   const handleDeleteProject = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'projects', id));
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => deleteDoc(doc(db, 'projects', id)));
 
+      // Update Express REST backup/primary
       await fetch(`/api/projects/${id}`, {
         method: 'DELETE'
       }).catch((e) => console.log("Local service endpoints silent"));
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.DELETE, `projects/${id}`);
+      console.error("Delete failed: ", err);
     }
   };
 
@@ -419,8 +454,10 @@ export default function App() {
         ...aboutFields
       };
 
-      await setDoc(doc(db, 'about', 'about-1'), updatedAbout);
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => setDoc(doc(db, 'about', 'about-1'), updatedAbout));
 
+      // Update Express REST backup/primary
       await fetch('/api/about', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -429,16 +466,17 @@ export default function App() {
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.UPDATE, 'about/about-1');
+      console.error("Update about failed: ", err);
     }
   };
 
   // Update brand hero banner
   const handleUpdateHero = async (newUrl: string) => {
     try {
-      await setDoc(doc(db, 'hero', 'hero-1'), { id: 'hero-1', imageUrl: newUrl });
+      // Safely write to Cloud Firestore
+      await safeFirestoreWrite(() => setDoc(doc(db, 'hero', 'hero-1'), { id: 'hero-1', imageUrl: newUrl }));
 
+      // Update Express REST backup/primary
       await fetch('/api/hero', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -447,8 +485,7 @@ export default function App() {
 
       await fetchAllContent();
     } catch (err) {
-      console.error(err);
-      handleFirestoreError(err, OperationType.UPDATE, 'hero/hero-1');
+      console.error("Update hero failed: ", err);
     }
   };
 
