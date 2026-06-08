@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Core helper primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedEmail(email) {
+      return isSignedIn() && request.auth.token.email == email && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedEmail("s.bharath2128@gmail.com");
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidLand(data) {
+      return data.keys().hasAll(['id', 'title', 'price', 'size', 'location', 'description', 'imageUrl']) 
+        && data.keys().size() == 7
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 200
+        && data.price is string && data.price.size() <= 50
+        && data.size is string && data.size.size() <= 50
+        && data.location is string && data.location.size() <= 200
+        && data.description is string && data.description.size() <= 4000
+        && data.imageUrl is string && data.imageUrl.size() <= 4000;
+    }
+
+    function isValidBuilding(data) {
+      return data.keys().hasAll(['id', 'title', 'price', 'size', 'location', 'description', 'imageUrl']) 
+        && data.keys().size() == 7
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 200
+        && data.price is string && data.price.size() <= 50
+        && data.size is string && data.size.size() <= 50
+        && data.location is string && data.location.size() <= 200
+        && data.description is string && data.description.size() <= 4000
+        && data.imageUrl is string && data.imageUrl.size() <= 4000;
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'title', 'location', 'specification', 'description', 'imageUrl', 'completionDate']) 
+        && data.keys().size() == 7
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 200
+        && data.location is string && data.location.size() <= 200
+        && data.specification is string && data.specification.size() <= 1000
+        && data.description is string && data.description.size() <= 4000
+        && data.imageUrl is string && data.imageUrl.size() <= 4000
+        && data.completionDate is string && data.completionDate.size() <= 100;
+    }
+
+    function isValidAbout(data) {
+      return data.keys().hasAll(['id', 'companyHistory', 'mission', 'vision', 'achievements', 'address', 'email', 'phone']) 
+        && data.keys().size() == 8
+        && data.id is string && data.id.size() <= 128
+        && data.companyHistory is string && data.companyHistory.size() <= 4000
+        && data.mission is string && data.mission.size() <= 4000
+        && data.vision is string && data.vision.size() <= 4000
+        && data.achievements is string && data.achievements.size() <= 4000
+        && data.address is string && data.address.size() <= 500
+        && data.email is string && data.email.size() <= 200
+        && data.phone is string && data.phone.size() <= 200;
+    }
+
+    function isValidHero(data) {
+      return data.keys().hasAll(['id', 'imageUrl']) 
+        && data.keys().size() == 2
+        && data.id is string && data.id.size() <= 128
+        && data.imageUrl is string && data.imageUrl.size() <= 4000;
+    }
+
+    // --- Collection Routes ---
+
+    match /lands/{landId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(landId) && isValidLand(incoming());
+      allow update: if isAdmin() && isValidId(landId) && isValidLand(incoming());
+      allow delete: if isAdmin() && isValidId(landId);
+    }
+
+    match /buildings/{buildingId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(buildingId) && isValidBuilding(incoming());
+      allow update: if isAdmin() && isValidId(buildingId) && isValidBuilding(incoming());
+      allow delete: if isAdmin() && isValidId(buildingId);
+    }
+
+    match /projects/{projectId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(projectId) && isValidProject(incoming());
+      allow update: if isAdmin() && isValidId(projectId) && isValidProject(incoming());
+      allow delete: if isAdmin() && isValidId(projectId);
+    }
+
+    match /about/{aboutId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(aboutId) && isValidAbout(incoming());
+      allow update: if isAdmin() && isValidId(aboutId) && isValidAbout(incoming());
+      allow delete: if isAdmin() && isValidId(aboutId);
+    }
+
+    match /hero/{heroId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(heroId) && isValidHero(incoming());
+      allow update: if isAdmin() && isValidId(heroId) && isValidHero(incoming());
+      allow delete: if isAdmin() && isValidId(heroId);
+    }
+  }
+}

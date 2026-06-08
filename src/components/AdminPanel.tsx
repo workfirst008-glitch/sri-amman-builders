@@ -12,6 +12,7 @@ interface AdminPanelProps {
   buildings: Building[];
   projects: Project[];
   onNavigate: (page: 'lands' | 'buildings' | 'projects' | 'about') => void;
+  onGoogleLogin?: () => void;
 }
 
 export default function AdminPanel({
@@ -23,6 +24,7 @@ export default function AdminPanel({
   buildings,
   projects,
   onNavigate,
+  onGoogleLogin,
 }: AdminPanelProps) {
   // Login credentials states
   const [username, setUsername] = useState('admin');
@@ -144,6 +146,27 @@ export default function AdminPanel({
             >
               {isLogInLoading ? 'Authorizing Access...' : 'Authenticate Admin Session'}
             </button>
+
+            {onGoogleLogin && (
+              <>
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-slate-200"></div>
+                  <span className="flex-shrink mx-4 text-[10px] text-slate-400 font-mono uppercase">or secure cloud sync</span>
+                  <div className="flex-grow border-t border-slate-200"></div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onGoogleLogin}
+                  className="w-full inline-flex items-center justify-center space-x-2 rounded-none bg-slate-900 hover:bg-slate-950 py-3 text-xs font-bold uppercase tracking-widest text-white shadow-sm transition-all cursor-pointer"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.55 0-6.429-2.88-6.429-6.429s2.88-6.429 6.43-6.429c1.547 0 2.943.548 4.028 1.448l2.915-2.915C18.815 2.1 15.685 1 12.24 1c-6.074 0-11 4.926-11 11s4.926 11 11 11c5.807 0 10.158-4.148 10.158-10.286 0-.61-.053-1.15-.158-1.729H12.24z" />
+                  </svg>
+                  <span>Connect with Google</span>
+                </button>
+              </>
+            )}
             
             <div className="text-center pt-3">
               <p className="text-[10px] text-slate-400 font-mono">Demo Default Passcode: <span className="text-slate-600 font-bold underline">sri_amman_2026</span></p>

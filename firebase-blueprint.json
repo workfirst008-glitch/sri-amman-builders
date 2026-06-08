@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Land": {
+      "title": "Land Listing",
+      "description": "Acquisition plots and land details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "price": { "type": "string" },
+        "size": { "type": "string" },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["id", "title", "price", "size", "location", "description", "imageUrl"]
+    },
+    "Building": {
+      "title": "Building Listing",
+      "description": "High-end residential buildings, apartments and custom villas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "price": { "type": "string" },
+        "size": { "type": "string" },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["id", "title", "price", "size", "location", "description", "imageUrl"]
+    },
+    "Project": {
+      "title": "Project Showcase",
+      "description": "Civil engineering milestones and delivered landmarks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "location": { "type": "string" },
+        "specification": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "completionDate": { "type": "string" }
+      },
+      "required": ["id", "title", "location", "specification", "description", "imageUrl", "completionDate"]
+    },
+    "About": {
+      "title": "About Corporate Data",
+      "description": "Company history, values, achievements, and contact coordinates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyHistory": { "type": "string" },
+        "mission": { "type": "string" },
+        "vision": { "type": "string" },
+        "achievements": { "type": "string" },
+        "address": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" }
+      },
+      "required": ["id", "companyHistory", "mission", "vision", "achievements", "address", "email", "phone"]
+    },
+    "Hero": {
+      "title": "Hero Configuration",
+      "description": "The homepage banner image configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["id", "imageUrl"]
+    },
+    "AdminSettings": {
+      "title": "Admin Credentials Config",
+      "description": "Admin panel login passcode information",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "passwordHash": { "type": "string" }
+      },
+      "required": ["username", "passwordHash"]
+    }
+  },
+  "firestore": {
+    "/lands/{landId}": {
+      "schema": "Land",
+      "description": "Detailed properties layout collection"
+    },
+    "/buildings/{buildingId}": {
+      "schema": "Building",
+      "description": "Detailed multi-bhk or premium villa collection"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Completed engineering buildings collection"
+    },
+    "/about/{aboutId}": {
+      "schema": "About",
+      "description": "Corporate about section profiles and hotline info"
+    },
+    "/hero/{heroId}": {
+      "schema": "Hero",
+      "description": "Homepage background image slider document parameters"
+    },
+    "/admin_settings/{settingsId}": {
+      "schema": "AdminSettings",
+      "description": "Database root access administrative configurations"
+    }
+  }
+}
