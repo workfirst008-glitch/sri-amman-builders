@@ -39,7 +39,7 @@ export default function App() {
     setIsLoading(true);
     setErrorStatus(null);
     try {
-      // 1. Fetch from local server-side database store
+      // 1. Fetch from local server-side database store (if available)
       const apiResponse = await fetch('/api/content')
         .then(res => res.json())
         .catch(() => null);
@@ -80,29 +80,56 @@ export default function App() {
       }
 
       // Determine which source of truth to use
-      const isGoogleSignedIn = auth.currentUser !== null;
+      const isFirestoreSeeded = loadedAbout !== null || loadedLands.length > 0 || loadedBuildings.length > 0 || loadedProjects.length > 0;
 
-      if (isGoogleSignedIn && (loadedLands.length > 0 || loadedBuildings.length > 0 || loadedProjects.length > 0 || loadedAbout)) {
+      if (isFirestoreSeeded) {
         console.log("Using primary Cloud Firestore database content");
         setLands(loadedLands);
         setBuildings(loadedBuildings);
         setProjects(loadedProjects);
         setAbout(loadedAbout || DEFAULT_ABOUT);
         setHeroImageUrl(loadedHeroUrl || DEFAULT_HERO_IMAGE);
-      } else if (apiResponse) {
-        console.log("Using primary server-side JSON store database content");
-        setLands(apiResponse.lands && apiResponse.lands.length > 0 ? apiResponse.lands : DEFAULT_LANDS);
-        setBuildings(apiResponse.buildings && apiResponse.buildings.length > 0 ? apiResponse.buildings : DEFAULT_BUILDINGS);
-        setProjects(apiResponse.projects && apiResponse.projects.length > 0 ? apiResponse.projects : DEFAULT_PROJECTS);
-        setAbout(apiResponse.about || DEFAULT_ABOUT);
-        setHeroImageUrl((apiResponse.hero && apiResponse.hero.imageUrl) || DEFAULT_HERO_IMAGE);
       } else {
-        console.log("Using fallback static default configuration data");
-        setLands(DEFAULT_LANDS);
-        setBuildings(DEFAULT_BUILDINGS);
-        setProjects(DEFAULT_PROJECTS);
-        setAbout(DEFAULT_ABOUT);
-        setHeroImageUrl(DEFAULT_HERO_IMAGE);
+        // If Firestore is empty, but we are authenticated as the Google admin, let's seed Firestore!
+        const canSeed = auth.currentUser && auth.currentUser.email === 's.bharath2128@gmail.com';
+        if (canSeed) {
+          console.log("Seeding empty Cloud Firestore with default dataset...");
+          try {
+            await setDoc(doc(db, 'about', 'about-1'), DEFAULT_ABOUT);
+            await setDoc(doc(db, 'hero', 'hero-1'), { id: 'hero-1', imageUrl: DEFAULT_HERO_IMAGE });
+            for (const item of DEFAULT_LANDS) {
+              await setDoc(doc(db, 'lands', item.id), item);
+            }
+            for (const item of DEFAULT_BUILDINGS) {
+              await setDoc(doc(db, 'buildings', item.id), item);
+            }
+            for (const item of DEFAULT_PROJECTS) {
+              await setDoc(doc(db, 'projects', item.id), item);
+            }
+            console.log("Cloud Firestore successfully seeded!");
+            // Re-fetch to load freshly written data
+            setTimeout(() => fetchAllContent(), 1000);
+            return;
+          } catch (err) {
+            console.warn("Auto-seeding Firestore failed:", err);
+          }
+        }
+
+        if (apiResponse) {
+          console.log("Using primary server-side JSON store database content");
+          setLands(apiResponse.lands && apiResponse.lands.length > 0 ? apiResponse.lands : DEFAULT_LANDS);
+          setBuildings(apiResponse.buildings && apiResponse.buildings.length > 0 ? apiResponse.buildings : DEFAULT_BUILDINGS);
+          setProjects(apiResponse.projects && apiResponse.projects.length > 0 ? apiResponse.projects : DEFAULT_PROJECTS);
+          setAbout(apiResponse.about || DEFAULT_ABOUT);
+          setHeroImageUrl((apiResponse.hero && apiResponse.hero.imageUrl) || DEFAULT_HERO_IMAGE);
+        } else {
+          console.log("Using fallback static default configuration data");
+          setLands(DEFAULT_LANDS);
+          setBuildings(DEFAULT_BUILDINGS);
+          setProjects(DEFAULT_PROJECTS);
+          setAbout(DEFAULT_ABOUT);
+          setHeroImageUrl(DEFAULT_HERO_IMAGE);
+        }
       }
 
       setErrorStatus(null);
@@ -182,6 +209,8 @@ export default function App() {
           setIsAdminLoggedIn(true);
           localStorage.setItem('sriAmmanAdminSession', 'active');
           alert(`Google Authentication Success! Connected to persistent database as master administrator ${result.user.displayName || result.user.email}.`);
+          // Trigger data reload immediately to fetch Google Firestore database or start seed
+          fetchAllContent();
         } else {
           alert(`Access Denied: Google profile ${result.user.email} is not listed in admin authorized entities list.`);
           await signOut(auth);
@@ -218,14 +247,17 @@ export default function App() {
 
   // Helper to safely write to Cloud Firestore if user is logged in
   const safeFirestoreWrite = async (writeFn: () => Promise<void>) => {
-    if (auth.currentUser) {
-      try {
-        await writeFn();
-      } catch (err) {
-        console.warn("Firestore sync write failed or denied:", err);
+    try {
+      await writeFn();
+      console.log("Firestore write succeeded");
+    } catch (err: any) {
+      console.warn("Firestore sync write failed or denied:", err);
+      if (!auth.currentUser) {
+        alert("Firestore database update was blocked because you are logged in with a local passcode.\n\nTo save changes permanently to Netlify/Firebase, please click 'Connect with Google' in the Admin Panel using s.bharath2128@gmail.com.");
+      } else {
+        alert(`Firestore Write Denied: ${err.message || err}`);
       }
-    } else {
-      console.log("Bypassing Firestore synchronized write: Admin logged in with passcode.");
+      throw err;
     }
   };
 

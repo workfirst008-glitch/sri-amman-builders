@@ -13,6 +13,53 @@ export default function ImageUploader({ currentImageUrl, onUploadSuccess, label 
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Constraints max dimensions to 800px to keep base64 string extremely lightweight
+          const max_size = 800;
+          if (width > height) {
+            if (width > max_size) {
+              height *= max_size / width;
+              width = max_size;
+            }
+          } else {
+            if (height > max_size) {
+              width *= max_size / height;
+              height = max_size;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(event.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = () => {
+          resolve(event.target?.result as string);
+        };
+      };
+      reader.onerror = () => {
+        resolve('');
+      };
+    });
+  };
+
   const processFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setError('Please select a valid image file (PNG, JPG, WEBP).');
@@ -23,31 +70,38 @@ export default function ImageUploader({ currentImageUrl, onUploadSuccess, label 
     setError(null);
 
     try {
-      // 1. Convert to Base64
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onloadend = async () => {
-        const base64data = reader.result as string;
+      // 1. Generate optimized client-side compressed base64 data URL
+      const compressedDataUrl = await compressImage(file);
+      if (!compressedDataUrl) {
+        setError('Failed to process image file.');
+        setIsUploading(false);
+        return;
+      }
 
-        // 2. Submit to backend API gate
+      // 2. Try uploading payload to Express node server gateway wrapper
+      try {
         const response = await fetch('/api/upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ file: base64data })
+          body: JSON.stringify({ file: compressedDataUrl })
         });
 
-        const result = await response.json();
-        if (response.ok && result.success) {
-          onUploadSuccess(result.imageUrl);
-        } else {
-          setError(result.message || 'Image upload session failed. Please check your file size or retry.');
+        if (response.ok) {
+          const result = await response.json();
+          if (result && result.success) {
+            onUploadSuccess(result.imageUrl);
+            setIsUploading(false);
+            return;
+          }
         }
-        setIsUploading(false);
-      };
-      reader.onerror = () => {
-        setError('Error reading file.');
-        setIsUploading(false);
-      };
+      } catch (uploadErr) {
+        console.log("Local Express upload gate not available, using client-side fallback:", uploadErr);
+      }
+
+      // 3. Fallback: If on Netlify / Serverless host, we accept the compressed base64 URL directly
+      console.log("Storage upload falling back to inline compressed Base64 data asset");
+      onUploadSuccess(compressedDataUrl);
+      setIsUploading(false);
     } catch (err: any) {
       setError(err.message || 'Network exception during image upload.');
       setIsUploading(false);
